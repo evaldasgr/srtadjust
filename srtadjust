@@ -1,0 +1,100 @@
+#!/usr/bin/python3
+import sys
+
+# Converts a .srt timecode (hh:mm:ss,ddd) to milliseconds
+def timecodeToMs(timecode):
+    # If the timecode is negative, remove the sign symbol so that the offsets
+    # remain correct
+    # Make note of the negative sign for calculations later
+    sign = 1
+    if timecode[0] == '-':
+        sign = -1
+        timecode = timecode[1:]
+
+    # The hours should be a 2 digit number, but in case it isn't (if the
+    # timecode is for >99 hours), find the position of the hour separator
+    hs = timecode.find(":")
+
+    h = int(timecode[0:hs])
+    m = int(timecode[hs + 1:hs + 3])
+    s = int(timecode[hs + 4:hs + 6])
+    d = int(timecode[hs + 7:hs + 10])
+
+    return ((h * 60 * 60 + m * 60 + s) * 1000 + d) * sign
+
+# Converts milliseconds to a .srt timecode (hh:mm:ss,ddd)
+def msToTimecode(ms):
+    timecode = ""
+
+    # Negative timecode will break the following calculation, so remember the
+    # sign for the output and make the timecode positive
+    if ms < 0:
+        ms = -ms
+        timecode = "-"
+
+    h = (ms // 1000) // (60 * 60)
+    m = ((ms // 1000) // 60) % 60
+    s = (ms // 1000) % 60
+    d = ms % 1000
+
+    return timecode + str(h).zfill(2) + ":" + str(m).zfill(2) + ":" + \
+        str(s).zfill(2) + "," + str(d).zfill(3)
+
+# Print help if no command-line arguments were provided
+if len(sys.argv) != 4:
+    sys.exit("Usage: srtadjust input-file output-file offset-in-ms")
+
+# The output file is written as the input file is being read, so writing to the
+# input file would result in it not being read correctly
+if sys.argv[1] == sys.argv[2]:
+    sys.exit("Error: Input and output files cannot be the same")
+
+# Parse command-line arguments
+try:
+    inputFile = open(sys.argv[1], "r")
+except:
+    sys.exit("Error: Could not open the input file")
+
+try:
+    outputFile = open(sys.argv[2], "w")
+except:
+    sys.exit("Error: Could not open the output file")
+
+try:
+    offsetMs = int(sys.argv[3])
+except:
+    sys.exit("Error: Could not parse the timecode offset")
+
+# Loop until EOF for every subtitle in the input file
+while True:
+    # Read the counter
+    line = inputFile.readline()
+
+    # Check for EOF
+    if line == "":
+        break
+
+    # Write the counter
+    outputFile.write(line)
+
+    # Read, adjust and write the timecode
+    line = inputFile.readline()
+
+    b = timecodeToMs(line[0:line.find(" ")]) + offsetMs
+    e = timecodeToMs(line[line.rfind(" ") + 1:]) + offsetMs
+
+    outputFile.write(msToTimecode(b) + " --> " + msToTimecode(e) + "\n")
+
+    # Read and write all subtitle text lines
+    while True:
+        line = inputFile.readline()
+
+        outputFile.write(line)
+
+        # A blank line marks the end of the subtitle
+        if line == "\n":
+            break
+
+        # Exit if EOF to avoid an infinite loop
+        elif line == "":
+            sys.exit(0)
