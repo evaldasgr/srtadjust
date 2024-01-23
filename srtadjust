@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import sys
+import argparse
 
 # Converts a .srt timecode (hh:mm:ss,ddd) to milliseconds
 def timecodeToMs(timecode):
@@ -40,61 +41,83 @@ def msToTimecode(ms):
     return timecode + str(h).zfill(2) + ":" + str(m).zfill(2) + ":" + \
         str(s).zfill(2) + "," + str(d).zfill(3)
 
-# Print help if no command-line arguments were provided
-if len(sys.argv) != 4:
-    sys.exit("Usage: srtadjust input-file output-file offset-in-ms")
+if __name__ == "__main__":
+    # Parse cmd-line arguments
+    parser = argparse.ArgumentParser(description="Utility for offsetting .srt timecodes.")
+    parser.add_argument("-i", "--input-file", help="input .srt file", required=True)
+    parser.add_argument("-o", "--offset", help="offset timecode or ms", required=True)
+    parser.add_argument("-f", "--offset-from", help="apply offset from this timecode or ms")
+    parser.add_argument("-t", "--offset-to", help="apply offset up to this timecode or ms")
+    parser.add_argument("output_file", help="output .srt file")
+    args = parser.parse_args()
 
-# The output file is written as the input file is being read, so writing to the
-# input file would result in it not being read correctly
-if sys.argv[1] == sys.argv[2]:
-    sys.exit("Error: Input and output files cannot be the same")
+    # Convert timecodes to ms
+    try:
+        offsetMs = int(args.offset)
+    except:
+        offsetMs = msToTimecode(args.offset)
 
-# Parse command-line arguments
-try:
-    inputFile = open(sys.argv[1], "r")
-except:
-    sys.exit("Error: Could not open the input file")
+    fromMs = float("-inf")
+    if args.offset_from:
+        try:
+            fromMs = int(args.offset_from)
+        except:
+            fromMs = timecodeToMs(args.offset_from)
 
-try:
-    outputFile = open(sys.argv[2], "w")
-except:
-    sys.exit("Error: Could not open the output file")
+    toMs = float("inf")
+    if args.offset_to:
+        try:
+            toMs = int(args.offset_to)
+        except:
+            toMs = timecodeToMs(args.offset_to)
 
-try:
-    offsetMs = int(sys.argv[3])
-except:
-    sys.exit("Error: Could not parse the timecode offset")
+    # Open files
+    try:
+        inputFile = open(args.input_file, "r")
+    except:
+        sys.exit("Error: Could not open the input file")
 
-# Loop until EOF for every subtitle in the input file
-while True:
-    # Read the counter
-    line = inputFile.readline()
+    try:
+        outputFile = open(args.output_file, "w")
+    except:
+        sys.exit("Error: Could not open the output file")
 
-    # Check for EOF
-    if line == "":
-        break
-
-    # Write the counter
-    outputFile.write(line)
-
-    # Read, adjust and write the timecode
-    line = inputFile.readline()
-
-    b = timecodeToMs(line[0:line.find(" ")]) + offsetMs
-    e = timecodeToMs(line[line.rfind(" ") + 1:]) + offsetMs
-
-    outputFile.write(msToTimecode(b) + " --> " + msToTimecode(e) + "\n")
-
-    # Read and write all subtitle text lines
+    # Loop until EOF for every subtitle in the input file
     while True:
+        # Read the counter
         line = inputFile.readline()
 
-        outputFile.write(line)
-
-        # A blank line marks the end of the subtitle
-        if line == "\n":
+        # Check for EOF
+        if line == "":
             break
 
-        # Exit if EOF to avoid an infinite loop
-        elif line == "":
-            sys.exit(0)
+        # Write the counter
+        outputFile.write(line)
+
+        # Read, adjust and write the timecode
+        line = inputFile.readline()
+
+        b = timecodeToMs(line[0:line.find(" ")])
+        e = timecodeToMs(line[line.rfind(" ") + 1:])
+        
+        # Apply the offset if within the desired range
+        if b >= fromMs and b < toMs:
+            b += offsetMs
+        if e >= fromMs and e < toMs:
+            e += offsetMs
+
+        outputFile.write(msToTimecode(b) + " --> " + msToTimecode(e) + "\n")
+
+        # Read and write all subtitle text lines
+        while True:
+            line = inputFile.readline()
+
+            outputFile.write(line)
+
+            # A blank line marks the end of the subtitle
+            if line == "\n":
+                break
+
+            # Exit if EOF to avoid an infinite loop
+            elif line == "":
+                sys.exit(0)
